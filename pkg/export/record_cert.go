@@ -92,7 +92,8 @@ func GetCertInfo(record provider.GetRecordCertReq) (certInfo provider.RecordCert
 
 	cert := certs[0]
 	certInfo.SubjectCommonName = cert.Subject.CommonName
-	if strings.Contains(certInfo.SubjectCommonName, record.DomainName) {
+	certInfo.IssuerCommonName = cert.Issuer.CommonName
+	if strings.Contains(certInfo.SubjectCommonName, record.DomainName) || strings.Contains(certInfo.IssuerCommonName, record.DomainName) {
 		certInfo.CertMatched = true
 	} else {
 		certInfo.CertMatched = false
@@ -104,8 +105,6 @@ func GetCertInfo(record provider.GetRecordCertReq) (certInfo provider.RecordCert
 	if len(cert.Subject.OrganizationalUnit) > 0 {
 		certInfo.SubjectOrganizationalUnit = cert.Subject.OrganizationalUnit[0]
 	}
-	// 从证书中提取颁发者信息
-	certInfo.IssuerCommonName = cert.Issuer.CommonName
 	if len(cert.Issuer.Organization) > 0 {
 		certInfo.IssuerOrganization = cert.Issuer.Organization[0]
 	}
