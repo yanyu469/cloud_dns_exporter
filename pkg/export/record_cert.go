@@ -3,6 +3,7 @@ package export
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"strings"
@@ -93,7 +94,7 @@ func GetCertInfo(record provider.GetRecordCertReq) (certInfo provider.RecordCert
 	cert := certs[0]
 	certInfo.SubjectCommonName = cert.Subject.CommonName
 	certInfo.IssuerCommonName = cert.Issuer.CommonName
-	if strings.Contains(certInfo.SubjectCommonName, record.DomainName) || strings.Contains(certInfo.IssuerCommonName, record.DomainName) {
+	if strings.Contains(certInfo.SubjectCommonName, record.DomainName) || checkCertMatched(record, cert) {
 		certInfo.CertMatched = true
 	} else {
 		certInfo.CertMatched = false
@@ -159,4 +160,15 @@ func isPortOpen(domain string) bool {
 	}
 	defer conn.Close()
 	return true
+}
+
+// checkCertMatched 检查证书是否匹配
+// https://github.com/opsre/cloud_dns_exporter/issues/25
+func checkCertMatched(record provider.GetRecordCertReq, cert *x509.Certificate) bool {
+	for _, name := range cert.DNSNames {
+		if strings.Contains(name, record.DomainName) {
+			return true
+		}
+	}
+	return false
 }
