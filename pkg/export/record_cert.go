@@ -84,40 +84,36 @@ func GetCertInfo(record provider.GetRecordCertReq) (certInfo provider.RecordCert
 	if len(certs) == 0 {
 		return certInfo, fmt.Errorf("未找到证书")
 	}
-
+	var targetCert *x509.Certificate
+	var minDaysUntilExpiry int = -1 // 初始化为-1，表示未找到有效证书
+	for _, cert := range certs {
+		daysUntilExpiry := int(time.Until(cert.NotAfter).Hours() / 24)
+		// 更新最小的过期时间
+		if minDaysUntilExpiry == -1 || daysUntilExpiry < minDaysUntilExpiry {
+			minDaysUntilExpiry = daysUntilExpiry
+		}
+		// 检查证书是否匹配
+		if strings.Contains(certInfo.SubjectCommonName, record.DomainName) || checkCertMatched(record, cert) {
+			targetCert = cert
+		}
+	}
+	if targetCert == nil {
+		return certInfo, fmt.Errorf("证书不匹配")
+	}
+	// certInfo.PeerCertsMinDaysUntilExpiry = minDaysUntilExpiry
 	certInfo.CloudProvider = record.CloudProvider
 	certInfo.CloudName = record.CloudName
 	certInfo.DomainName = record.DomainName
 	certInfo.FullRecord = record.FullRecord
 	certInfo.RecordID = record.RecordID
+	certInfo.SubjectCommonName = targetCert.Subject.CommonName
+	certInfo.IssuerCommonName = targetCert.Issuer.CommonName
+	certInfo.CertMatched = true
+	certInfo.CreatedDate = targetCert.NotBefore.Format(time.DateOnly)
+	certInfo.ExpiryDate = targetCert.NotAfter.Format(time.DateOnly)
+	// daysUntilExpiry := int(time.Until(targetCert.NotAfter).Hours() / 24)
+	certInfo.DaysUntilExpiry = minDaysUntilExpiry
 
-	cert := certs[0]
-	certInfo.SubjectCommonName = cert.Subject.CommonName
-	certInfo.IssuerCommonName = cert.Issuer.CommonName
-	if strings.Contains(certInfo.SubjectCommonName, record.DomainName) || checkCertMatched(record, cert) {
-		certInfo.CertMatched = true
-	} else {
-		certInfo.CertMatched = false
-		certInfo.ErrorMsg = "证书不匹配"
-	}
-	if len(cert.Subject.Organization) > 0 {
-		certInfo.SubjectOrganization = cert.Subject.Organization[0]
-	}
-	if len(cert.Subject.OrganizationalUnit) > 0 {
-		certInfo.SubjectOrganizationalUnit = cert.Subject.OrganizationalUnit[0]
-	}
-	if len(cert.Issuer.Organization) > 0 {
-		certInfo.IssuerOrganization = cert.Issuer.Organization[0]
-	}
-	if len(cert.Issuer.OrganizationalUnit) > 0 {
-		certInfo.IssuerOrganizationalUnit = cert.Issuer.OrganizationalUnit[0]
-	}
-	// 从证书中提取日期信息
-	certInfo.CreatedDate = cert.NotBefore.Format(time.DateOnly)
-	certInfo.ExpiryDate = cert.NotAfter.Format(time.DateOnly)
-	// 计算距离到期日期还有多少天
-	daysUntilExpiry := int(time.Until(cert.NotAfter).Hours() / 24)
-	certInfo.DaysUntilExpiry = daysUntilExpiry
 	return certInfo, nil
 }
 
@@ -133,7 +129,8 @@ func getNewRecord(records []provider.Record) (newRecords []provider.Record) {
 				rec.FullRecord = rec.DomainName
 			}
 			if strings.Contains(rec.FullRecord, "*") {
-				rec.FullRecord = strings.ReplaceAll(rec.FullRecord, "*", "a")
+				//rec.FullRecord = strings.ReplaceAll(rec.FullRecord, "*", "a")
+				return
 			}
 			if (rec.RecordType == "A" || rec.RecordType == "CNAME") &&
 				rec.RecordStatus == "enable" && isPortOpen(rec.RecordValue) {
